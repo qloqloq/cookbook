@@ -1,31 +1,35 @@
-#pip install influxdb
-from influxdb import InfluxDBClient
-from datetime import datetime
+import influxdb_client
+from influxdb_client.client.write_api import SYNCHRONOUS
 
+bucket = "<my-bucket>"
+org = "<my-org>"
+token = "<my-token>"
+url = "<my-host>"
 
-if __name__ == '__main__':
-    # Setup database
-    client = InfluxDBClient('localhost', 8086, 'admin', 'Password1', 'mydb')
-    client.create_database('mydb')
-    client.get_list_database()
-    client.switch_database('mydb')
+client = influxdb_client.InfluxDBClient(
+    url=url,
+    token=token,
+    org=org
+)
 
-    # Write
-    json_payload = []
-    data = {
-        "measurement": "home",
-        "tags": {
-            "ticker": "bedroom"
-            },
-        "time": datetime.now(),
-        "fields": {
-            'temperature': 22,
-            'hum': 35.5
-        }
-    }
-    json_payload.append(data)
-    client.write_points(json_payload)
+# Write script
+write_api = client.write_api(write_options=SYNCHRONOUS)
 
-    # Read
-    print(client.get_list_measurements())
-    print(client.query('select * from home'))
+p = influxdb_client.Point("my_measurement").tag("location", "Prague").field("temperature", 25.3)
+write_api.write(bucket=bucket, org=org, record=p)
+
+query = 'from(bucket:"my-bucket")\
+|> range(start: -10m)\
+|> filter(fn:(r) => r._measurement == "my_measurement")\
+|> filter(fn:(r) => r.location == "Prague")\
+|> filter(fn:(r) => r._field == "temperature")'
+
+query_api = client.query_api()
+result = query_api.query(org=org, query=query)
+
+results = []
+for table in result:
+  for record in table.records:
+    results.append((record.get_field(), record.get_value()))
+
+print(results)
